@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: duyes-miniapp
+    env: python
+    buildCommand: pip install -r requirements-miniapp.txt
+    startCommand: uvicorn miniapp.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: DB_NAME
+        value: duyes.db

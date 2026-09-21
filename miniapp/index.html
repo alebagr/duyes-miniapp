@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Du&Yes</title>
+  <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-mark">D<span>&</span>Y</div>
+      <div>
+        <div class="brand">Du&Yes</div>
+        <div class="tagline">Ты и Я — к счастью вместе</div>
+      </div>
+      <button id="settingsBtn" class="icon-btn" aria-label="Настройки">⚙</button>
+    </header>
+
+    <main id="app" class="content"></main>
+
+    <nav class="bottom-nav" aria-label="Навигация">
+      <button data-page="home" class="nav-item active"><span>⌂</span><small>Главная</small></button>
+      <button data-page="search" class="nav-item"><span>⌕</span><small>Поиск</small></button>
+      <button data-page="favorites" class="nav-item"><span>♡</span><small>Избранное</small></button>
+      <button data-page="chats" class="nav-item"><span>◌</span><small>Сообщения</small></button>
+      <button data-page="profile" class="nav-item"><span>♙</span><small>Профиль</small></button>
+    </nav>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
