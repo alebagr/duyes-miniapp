@@ -15,11 +15,16 @@ from fastapi.staticfiles import StaticFiles
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
+
+# Автоматически создаем папку static, если ее нет
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+
 DB_NAME = os.getenv("DB_NAME", "duyes.db")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 INIT_DATA_MAX_AGE = int(os.getenv("MINIAPP_INIT_DATA_MAX_AGE", "86400"))
 
 app = FastAPI(title="Du&Yes Mini App API", version="1.0.0")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
