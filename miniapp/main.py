@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
+STATIC_DIR = BASE_DIR
 DB_NAME = os.getenv("DB_NAME", "duyes.db")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 INIT_DATA_MAX_AGE = int(os.getenv("MINIAPP_INIT_DATA_MAX_AGE", "86400"))
