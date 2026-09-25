@@ -22,7 +22,7 @@ DB_NAME = os.getenv("DB_NAME", "duyes.db")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 INIT_DATA_MAX_AGE = int(os.getenv("MINIAPP_INIT_DATA_MAX_AGE", "86400"))
 
-app = FastAPI(title="Du&Yes Mini App API", version="2.1.0")
+app = FastAPI(title="Du&Yes Mini App API", version="2.3.0")
 init_db()
 
 app.add_middleware(
@@ -41,7 +41,6 @@ def db():
 
 
 def send_telegram_notification(user_id: int, text: str):
-    """Отправляет личное сообщение пользователю через Telegram Bot API."""
     if not BOT_TOKEN:
         return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -99,11 +98,6 @@ def calculate_age(birth_date):
         return None
 
 
-@app.get("/api/health")
-def health():
-    return {"ok": True, "service": "duyes-miniapp"}
-
-
 @app.get("/api/me")
 def me(x_telegram_init_data: str | None = Header(default=None)):
     uid = current_user(x_telegram_init_data)
@@ -114,7 +108,7 @@ def me(x_telegram_init_data: str | None = Header(default=None)):
     coins = bal_row["coins"] if bal_row else 0
     conn.close()
 
-    if not row:
+    if not row or not row.get("profile_published"):
         return {"registered": False, "user_id": uid, "coins": coins}
     
     data = dict(row)
@@ -129,26 +123,69 @@ def update_profile(data: dict, x_telegram_init_data: str | None = Header(default
     uid = current_user(x_telegram_init_data)
     conn = db()
     
+    existing = conn.execute("SELECT profile_published FROM users WHERE user_id=?", (uid,)).fetchone()
+    is_already_registered = existing and existing["profile_published"] == 1
+
+    if is_already_registered:
+        # Разрешаем изменять только описание "О себе"
+        conn.execute("""
+            UPDATE users SET 
+                about = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ?
+        """, (data.get("about"), uid))
+    else:
+        # Первичная регистрация со всеми неизменяемыми полями
+        conn.execute("""
+            INSERT INTO users (
+                user_id, first_name, gender, birth_date, country, city, 
+                previously_married, has_children, about, profile_published
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            ON CONFLICT(user_id) DO UPDATE SET
+                first_name = excluded.first_name,
+                gender = excluded.gender,
+                birth_date = excluded.birth_date,
+                country = excluded.country,
+                city = excluded.city,
+                previously_married = excluded.previously_married,
+                has_children = excluded.has_children,
+                about = excluded.about,
+                profile_published = 1,
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            uid,
+            data.get("first_name"),
+            data.get("gender", "male"),
+            data.get("birth_date"),
+            data.get("country"),
+            data.get("city"),
+            int(data.get("previously_married", 0)),
+            int(data.get("has_children", 0)),
+            data.get("about")
+        ))
+
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@app.post("/api/settings")
+def update_settings(data: dict, x_telegram_init_data: str | None = Header(default=None)):
+    uid = current_user(x_telegram_init_data)
+    conn = db()
     conn.execute("""
-        INSERT INTO users (user_id, name, gender, birth_date, country, city, about, profile_published)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-        ON CONFLICT(user_id) DO UPDATE SET
-            name = excluded.name,
-            gender = COALESCE(excluded.gender, users.gender),
-            birth_date = COALESCE(excluded.birth_date, users.birth_date),
-            country = COALESCE(excluded.country, users.country),
-            city = COALESCE(excluded.city, users.city),
-            about = COALESCE(excluded.about, users.about),
-            profile_published = 1,
-            updated_at = CURRENT_TIMESTAMP
+        UPDATE users SET
+            photos_hidden = ?,
+            show_online_status = ?,
+            show_last_seen = ?,
+            notifications_enabled = ?
+        WHERE user_id = ?
     """, (
-        uid,
-        data.get("name"),
-        data.get("gender", "male"),
-        data.get("birth_date"),
-        data.get("country"),
-        data.get("city"),
-        data.get("about")
+        1 if data.get("photos_hidden") else 0,
+        1 if data.get("show_online_status") else 0,
+        1 if data.get("show_last_seen") else 0,
+        1 if data.get("notifications_enabled") else 0,
+        uid
     ))
     conn.commit()
     conn.close()
@@ -175,7 +212,7 @@ def profiles(
         params.append(opposite)
 
     rows = conn.execute(
-        f"SELECT * FROM users WHERE profile_published=1 AND profile_blocked=0 AND user_id<>? {gender_filter}",
+        f"SELECT * FROM users WHERE profile_published=1 AND COALESCE(profile_blocked,0)=0 AND user_id<>? {gender_filter}",
         params
     ).fetchall()
     conn.close()
@@ -192,14 +229,22 @@ def profiles(
             continue
         if city and p.get("city") != city:
             continue
+        
+        # Учитываем настройки скрытия фото
+        photo = None if p.get("photos_hidden") else p.get("photo_1")
+
         result.append({
             "user_id": p.get("user_id"),
-            "name": p.get("name"),
+            "first_name": p.get("first_name"),
             "age": age,
             "country": p.get("country"),
             "city": p.get("city"),
+            "previously_married": p.get("previously_married", 0),
+            "has_children": p.get("has_children", 0),
             "about": p.get("about"),
-            "photo_1_file_id": p.get("photo_1_file_id"),
+            "photo_1": photo,
+            "show_online_status": p.get("show_online_status", 1),
+            "is_online": p.get("is_online", 0),
             "verified": p.get("verification_status") == "verified",
         })
     return {"profiles": result}
@@ -219,7 +264,7 @@ def chats(x_telegram_init_data: str | None = Header(default=None)):
     peers = []
     for r in rows:
         peer_id = r["peer_id"]
-        u = conn.execute("SELECT name, city, photo_1_file_id, verification_status FROM users WHERE user_id=?", (peer_id,)).fetchone()
+        u = conn.execute("SELECT first_name, city, verification_status FROM users WHERE user_id=?", (peer_id,)).fetchone()
         last_msg = conn.execute("""
             SELECT text, created_at FROM messages 
             WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)
@@ -229,7 +274,7 @@ def chats(x_telegram_init_data: str | None = Header(default=None)):
         if u:
             peers.append({
                 "user_id": peer_id,
-                "name": u["name"] or "Пользователь",
+                "first_name": u["first_name"] or "Пользователь",
                 "city": u["city"],
                 "verified": u["verification_status"] == "verified",
                 "last_message": last_msg["text"] if last_msg else "",
@@ -263,8 +308,8 @@ def send_message(data: dict, x_telegram_init_data: str | None = Header(default=N
 
     conn = db()
     conn.execute("INSERT INTO messages (sender_id, receiver_id, text) VALUES (?, ?, ?)", (uid, receiver_id, text))
-    sender_row = conn.execute("SELECT name FROM users WHERE user_id=?", (uid,)).fetchone()
-    sender_name = sender_row["name"] if sender_row and sender_row["name"] else "Пользователь"
+    sender_row = conn.execute("SELECT first_name FROM users WHERE user_id=?", (uid,)).fetchone()
+    sender_name = sender_row["first_name"] if sender_row and sender_row["first_name"] else "Пользователь"
     conn.commit()
     conn.close()
 
@@ -310,8 +355,8 @@ def send_gift(data: dict, x_telegram_init_data: str | None = Header(default=None
     conn.execute("UPDATE gift_balances SET coins = coins - ? WHERE user_id=?", (gift_price, uid))
     conn.execute("INSERT INTO sent_gifts (sender_id, receiver_id, gift_id) VALUES (?, ?, ?)", (uid, receiver_id, gift_id))
 
-    sender_row = conn.execute("SELECT name FROM users WHERE user_id=?", (uid,)).fetchone()
-    sender_name = sender_row["name"] if sender_row and sender_row["name"] else "Пользователь"
+    sender_row = conn.execute("SELECT first_name FROM users WHERE user_id=?", (uid,)).fetchone()
+    sender_name = sender_row["first_name"] if sender_row and sender_row["first_name"] else "Пользователь"
 
     conn.commit()
     conn.close()
@@ -339,7 +384,7 @@ def favorites(x_telegram_init_data: str | None = Header(default=None)):
         p = dict(r)
         out.append({
             "user_id": p.get("user_id"),
-            "name": p.get("name"),
+            "first_name": p.get("first_name"),
             "age": calculate_age(p.get("birth_date")),
             "city": p.get("city"),
             "verified": p.get("verification_status") == "verified"
@@ -356,8 +401,8 @@ def add_favorite(target_id: int, x_telegram_init_data: str | None = Header(defau
     conn = db()
     conn.execute("INSERT OR IGNORE INTO favorites(user_id, favorite_user_id) VALUES(?,?)", (uid, target_id))
 
-    me_row = conn.execute("SELECT name FROM users WHERE user_id=?", (uid,)).fetchone()
-    sender_name = me_row["name"] if me_row and me_row["name"] else "Пользователь"
+    me_row = conn.execute("SELECT first_name FROM users WHERE user_id=?", (uid,)).fetchone()
+    sender_name = me_row["first_name"] if me_row and me_row["first_name"] else "Пользователь"
 
     conn.commit()
     conn.close()
@@ -391,7 +436,6 @@ def request_verification(x_telegram_init_data: str | None = Header(default=None)
 
 @app.get("/api/admin/add-coins")
 def add_coins(x_telegram_init_data: str | None = Header(default=None)):
-    """Вспомогательный эндпоинт для автоначисления 1000 монет пользователю."""
     uid = current_user(x_telegram_init_data)
     conn = db()
     conn.execute(
