@@ -26,11 +26,26 @@ function nav(page) {
   render();
 }
 
+function updateNavVisibility() {
+  const navEl = document.querySelector('.nav') || document.querySelector('nav') || document.getElementById('bottomNav');
+  const isRegistered = me && me.registered;
+  if (navEl) {
+    navEl.style.display = isRegistered ? 'flex' : 'none';
+  }
+}
+
 async function render() {
   try {
     const r = await api('/api/me');
     me = r;
     
+    updateNavVisibility();
+
+    // Если не зарегистрирован — форсируем показ экрана 'home' (стартового)
+    if (!me.registered) {
+      return home();
+    }
+
     if (currentPage === 'home') return home();
     if (currentPage === 'search') return search();
     if (currentPage === 'favorites') return favorites();
@@ -46,7 +61,7 @@ function home() {
   const isRegistered = me && me.registered;
 
   if (!isRegistered) {
-    // Стартовая страница для новых пользователей
+    // Стартовая страница до регистрации (Нижнее меню скрыто)
     app.innerHTML = `
       <section class="hero">
         <h1>Du&Yes ❤️</h1>
@@ -65,7 +80,7 @@ function home() {
     return;
   }
 
-  // Главная страница для зарегистрированных пользователей
+  // Главная страница после успешной регистрации
   app.innerHTML = `
     <section class="hero">
       <h1>Du&Yes ❤️</h1>
@@ -313,6 +328,11 @@ function escapeHtml(s) {
   return String(s || '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
 }
 
+const settingsBtn = document.getElementById('settingsBtn');
+if (settingsBtn) {
+  settingsBtn.addEventListener('click', () => nav('profile'));
+}
+
 document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => nav(b.dataset.page)));
-document.getElementById('settingsBtn').addEventListener('click', () => nav('profile'));
+
 render();
