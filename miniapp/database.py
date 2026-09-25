@@ -1,6 +1,5 @@
 import os
 import sqlite3
-from pathlib import Path
 
 DB_NAME = os.getenv("DB_NAME", "duyes.db")
 
@@ -102,11 +101,19 @@ def init_db():
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         viewed INTEGER DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS messages (
+        message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id INTEGER NOT NULL,
+        receiver_id INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        is_read INTEGER DEFAULT 0
+    );
     ''')
-    conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('GIFTS_ENABLED','0')")
+    conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('GIFTS_ENABLED','1')")
     conn.commit()
     conn.close()
 
 
-# Initialize the Mini App database when the service starts.
 init_db()
