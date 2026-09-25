@@ -43,6 +43,29 @@ async function render() {
 }
 
 function home() {
+  const isRegistered = me && me.registered;
+
+  if (!isRegistered) {
+    // Стартовая страница для новых пользователей
+    app.innerHTML = `
+      <section class="hero">
+        <h1>Du&Yes ❤️</h1>
+        <p>Добро пожаловать в сервис знакомств для создания армянской семьи.</p>
+        <div class="actions" style="margin-top:16px;">
+          <button class="btn" onclick="openRegistration()">📝 Регистрация</button>
+        </div>
+      </section>
+
+      <div class="section-title"><h2>Информация</h2></div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button class="btn secondary" style="width:100%; text-align:left;" onclick="showInfo('about')">📖 Описание сервиса</button>
+        <button class="btn secondary" style="width:100%; text-align:left;" onclick="showInfo('rules')">📜 Правила ресурса</button>
+        <button class="btn secondary" style="width:100%; text-align:left;" onclick="showInfo('privacy')">🔒 Политика конфиденциальности</button>
+      </div>`;
+    return;
+  }
+
+  // Главная страница для зарегистрированных пользователей
   app.innerHTML = `
     <section class="hero">
       <h1>Du&Yes ❤️</h1>
@@ -59,6 +82,81 @@ function home() {
         <div class="card-sub">Все профили проходят проверку. Для подтверждения анкеты отправьте заявку на верификацию в профиле.</div>
       </div>
     </div>`;
+}
+
+function showInfo(type) {
+  let title = '';
+  let content = '';
+
+  if (type === 'about') {
+    title = 'Описание сервиса';
+    content = 'Du&Yes — это специализированная платформа для знакомств, созданная с целью поиска спутника жизни и построения крепкой армянской семьи.';
+  } else if (type === 'rules') {
+    title = 'Правила ресурса';
+    content = '1. Будьте вежливы и уважительны к собеседникам.<br>2. Запрещено размещать недостоверные данные или чужие фотографии.<br>3. Запрещены спам, коммерческая реклама и оскорбления.';
+  } else if (type === 'privacy') {
+    title = 'Политика конфиденциальности';
+    content = 'Мы бережно относимся к вашим персональным данным. Информация используется исключительно для обеспечения работы сервиса и не передается третьим лицам.';
+  }
+
+  app.innerHTML = `
+    <div class="section-title">
+      <button class="btn secondary" style="flex:none; padding:5px 10px;" onclick="nav('home')">← Назад</button>
+      <h2>${title}</h2>
+    </div>
+    <div class="card" style="padding:16px; line-height:1.6; color:var(--muted);">
+      ${content}
+    </div>`;
+}
+
+function openRegistration() {
+  app.innerHTML = `
+    <div class="section-title">
+      <button class="btn secondary" style="flex:none; padding:5px 10px;" onclick="nav('home')">← Назад</button>
+      <h2>Регистрация</h2>
+    </div>
+    <div class="card" style="padding:16px; display:flex; flex-direction:column; gap:12px;">
+      <label>Ваше имя:
+        <input type="text" id="regName" placeholder="Имя" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;" />
+      </label>
+      <label>Пол:
+        <select id="regGender" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;">
+          <option value="male">Мужской</option>
+          <option value="female">Женский</option>
+        </select>
+      </label>
+      <label>Дата рождения:
+        <input type="date" id="regBirth" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;" />
+      </label>
+      <label>Город:
+        <input type="text" id="regCity" placeholder="Например, Ереван" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;" />
+      </label>
+      <label>О себе:
+        <textarea id="regAbout" placeholder="Расскажите о себе..." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;"></textarea>
+      </label>
+      <button class="btn" style="margin-top:8px;" onclick="submitRegistration()">Завершить регистрацию</button>
+    </div>`;
+}
+
+async function submitRegistration() {
+  const name = document.getElementById('regName').value.trim();
+  const gender = document.getElementById('regGender').value;
+  const birth_date = document.getElementById('regBirth').value;
+  const city = document.getElementById('regCity').value.trim();
+  const about = document.getElementById('regAbout').value.trim();
+
+  if (!name || !birth_date) {
+    if (tg?.showPopup) tg.showPopup({ title: 'Ошибка', message: 'Пожалуйста, укажите имя и дату рождения.', buttons: [{ type: 'ok' }] });
+    return;
+  }
+
+  await api('/api/me', {
+    method: 'POST',
+    body: JSON.stringify({ name, gender, birth_date, city, about })
+  });
+
+  if (tg?.showPopup) tg.showPopup({ title: 'Du&Yes', message: 'Регистрация успешно завершена!', buttons: [{ type: 'ok' }] });
+  render();
 }
 
 async function search() {
