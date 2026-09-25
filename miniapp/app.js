@@ -27,7 +27,6 @@ function nav(page) {
 }
 
 function updateNavVisibility() {
-  // Находим элемент навигации и отображаем его ТОЛЬКО для зарегистрированных пользователей
   const navEl = document.querySelector('nav') || document.querySelector('.nav') || document.getElementById('bottomNav');
   const isRegistered = me && me.registered;
   if (navEl) {
@@ -40,10 +39,8 @@ async function render() {
     const r = await api('/api/me');
     me = r;
     
-    // Переключаем видимость меню в зависимости от статуса регистрации
     updateNavVisibility();
 
-    // Если пользователь НЕ зарегистрирован — принудительно показываем стартовую страницу
     if (!me.registered) {
       return home();
     }
@@ -53,6 +50,7 @@ async function render() {
     if (currentPage === 'favorites') return favorites();
     if (currentPage === 'chats') return chats();
     if (currentPage === 'profile') return profile();
+    if (currentPage === 'settings') return settingsPage();
     if (currentPage === 'chat_detail') return openChat(activeChatUserId);
   } catch (e) {
     app.innerHTML = `<div class="empty"><div style="font-size:42px">⚠️</div><p>Ошибка загрузки.</p><small>${escapeHtml(e.message)}</small></div>`;
@@ -63,11 +61,10 @@ function home() {
   const isRegistered = me && me.registered;
 
   if (!isRegistered) {
-    // Стартовая страница ДО регистрации
     app.innerHTML = `
       <section class="hero">
         <h1>Du&Yes ❤️</h1>
-        <p>Добро пожаловать в сервис знакомств для создания армянской семьи.</p>
+        <p>Ты и Я — к счастью вместе. Сервис знакомств для создания армянской семьи.</p>
         <div class="actions" style="margin-top:16px;">
           <button class="btn" onclick="openRegistration()">📝 Регистрация</button>
         </div>
@@ -82,7 +79,6 @@ function home() {
     return;
   }
 
-  // Главная страница ПОСЛЕ регистрации
   app.innerHTML = `
     <section class="hero">
       <h1>Du&Yes ❤️</h1>
@@ -96,7 +92,7 @@ function home() {
     <div class="card">
       <div class="card-body">
         <div class="card-title">Безопасность и проверка</div>
-        <div class="card-sub">Все профили проходят проверку модерацией. Для подтверждения анкеты отправьте заявку на верификацию в профиле.</div>
+        <div class="card-sub">Все профили проходят проверку модерацией. Для получения синей галочки отправьте заявку на верификацию в профиле.</div>
       </div>
     </div>`;
 }
@@ -154,39 +150,66 @@ function openRegistration() {
           <option value="female">Женский</option>
         </select>
       </label>
-      <label>Дата рождения:
+      <label>Дата рождения (вам должно быть 18+):
         <input type="date" id="regBirth" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;" />
       </label>
+      <label>Страна:
+        <input type="text" id="regCountry" placeholder="Армения, Россия..." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;" />
+      </label>
       <label>Город:
-        <input type="text" id="regCity" placeholder="Например, Ереван" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;" />
+        <input type="text" id="regCity" placeholder="Ереван, Москва..." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;" />
+      </label>
+      <label>Семейное положение:
+        <select id="regMarried" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;">
+          <option value="0">Не состоял(а) в браке</option>
+          <option value="1">Состоял(а) в браке</option>
+        </select>
+      </label>
+      <label>Дети:
+        <select id="regChildren" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;">
+          <option value="0">Нет детей</option>
+          <option value="1">Есть дети</option>
+        </select>
       </label>
       <label>О себе:
-        <textarea id="regAbout" placeholder="Расскажите о себе..." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;"></textarea>
+        <textarea id="regAbout" placeholder="Расскажите о себе, ваших ценностях и целях..." style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;"></textarea>
       </label>
       <button class="btn" style="margin-top:8px;" onclick="submitRegistration()">Завершить регистрацию</button>
     </div>`;
 }
 
 async function submitRegistration() {
-  const name = document.getElementById('regName').value.trim();
+  const first_name = document.getElementById('regName').value.trim();
   const gender = document.getElementById('regGender').value;
   const birth_date = document.getElementById('regBirth').value;
+  const country = document.getElementById('regCountry').value.trim();
   const city = document.getElementById('regCity').value.trim();
+  const previously_married = document.getElementById('regMarried').value;
+  const has_children = document.getElementById('regChildren').value;
   const about = document.getElementById('regAbout').value.trim();
 
-  if (!name || !birth_date) {
+  if (!first_name || !birth_date) {
     if (tg?.showPopup) tg.showPopup({ title: 'Ошибка', message: 'Пожалуйста, укажите имя и дату рождения.', buttons: [{ type: 'ok' }] });
+    return;
+  }
+
+  const bDate = new Date(birth_date);
+  const today = new Date();
+  let age = today.getFullYear() - bDate.getFullYear();
+  const m = today.getMonth() - bDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < bDate.getDate())) age--;
+
+  if (age < 18) {
+    if (tg?.showPopup) tg.showPopup({ title: 'Ограничение по возрасту', message: 'Регистрация разрешена только лицам старше 18 лет.', buttons: [{ type: 'ok' }] });
     return;
   }
 
   await api('/api/me', {
     method: 'POST',
-    body: JSON.stringify({ name, gender, birth_date, city, about })
+    body: JSON.stringify({ first_name, gender, birth_date, country, city, previously_married, has_children, about })
   });
 
   if (tg?.showPopup) tg.showPopup({ title: 'Du&Yes', message: 'Регистрация успешно завершена!', buttons: [{ type: 'ok' }] });
-  
-  // После успешной регистрации вызываем рендер, который раскроет нижнюю панель
   render();
 }
 
@@ -199,13 +222,17 @@ async function search() {
 
 function profileCard(p) {
   const loc = [p.city, p.country].filter(Boolean).join(', ');
+  const marriedStr = p.previously_married ? 'Был(а) в браке' : 'В браке не состоял(а)';
+  const childrenStr = p.has_children ? 'Есть дети' : 'Детей нет';
+
   return `
     <article class="card">
-      <div class="photo">👤</div>
+      <div class="photo">${p.photo_1 ? `<img src="${p.photo_1}" style="width:100%; height:100%; object-fit:cover; border-radius:12px;" />` : '👤'}</div>
       <div class="card-body">
-        <div class="card-title">${escapeHtml(p.name||'Пользователь')}, ${p.age||'—'} ${p.verified ? '<span class="verified">✓</span>' : ''}</div>
+        <div class="card-title">${escapeHtml(p.first_name||'Пользователь')}, ${p.age||'—'} ${p.verified ? '<span class="verified">✓</span>' : ''}</div>
         <div class="card-sub">${escapeHtml(loc||'')}</div>
-        <div class="actions">
+        <div class="card-sub" style="font-size:12px; opacity:0.8; margin-top:4px;">${marriedStr} • ${childrenStr}</div>
+        <div class="actions" style="margin-top:10px;">
           <button class="btn secondary" onclick="fav(${p.user_id})">♡</button>
           <button class="btn" onclick="startChat(${p.user_id})">Написать</button>
         </div>
@@ -233,7 +260,7 @@ async function chats() {
     <div style="display:flex; flex-direction:column; gap:10px;">
       ${list.map(c => `
         <div class="card" onclick="startChat(${c.user_id})" style="padding:12px; cursor:pointer;">
-          <div style="font-weight:bold;">${escapeHtml(c.name)}${c.verified ? '✓' : ''}</div>
+          <div style="font-weight:bold;">${escapeHtml(c.first_name)}${c.verified ? '✓' : ''}</div>
           <div class="card-sub">${escapeHtml(c.last_message || 'Нажмите, чтобы открыть диалог')}</div>
         </div>
       `).join('')}
@@ -280,43 +307,99 @@ async function sendMsg(userId) {
 
 function profile() {
   const u = me.user || {};
+  const isVerified = u.verification_status === 'verified';
+  const isPending = u.verification_status === 'pending';
+  const marriedStr = u.previously_married ? 'Ранее состоял(а) в браке' : 'Ранее в браке не состоял(а)';
+  const childrenStr = u.has_children ? 'Есть дети' : 'Детей нет';
+
   app.innerHTML = `
     <section class="hero">
       <div style="font-size:48px">👤</div>
-      <h1>${escapeHtml(u.name || 'Моя анкета')}</h1>
-      <p>${u.city || 'Город не указан'}</p>
+      <h1>${escapeHtml(u.first_name || 'Моя анкета')} ${isVerified ? '✓' : ''}</h1>
+      <p>🎂 ${u.age || '—'} лет • 📍 ${u.city || ''}, ${u.country || ''}</p>
       <p class="gold" style="margin-top:6px;">Монеты: 🪙 ${me.coins || 0}</p>
     </section>
 
-    <div class="section-title"><h2>Редактировать анкету</h2></div>
-    <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:10px;">
-      <input type="text" id="editName" value="${escapeHtml(u.name||'')}" placeholder="Ваше имя" style="padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff;" />
-      <input type="date" id="editBirth" value="${u.birth_date||''}" style="padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff;" />
-      <input type="text" id="editCity" value="${escapeHtml(u.city||'')}" placeholder="Город" style="padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff;" />
-      <textarea id="editAbout" placeholder="О себе" style="padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff;">${escapeHtml(u.about||'')}</textarea>
-      <button class="btn" onclick="saveProfile()">Сохранить изменения</button>
+    <!-- Вывод неизменяемых данных -->
+    <div class="card" style="padding:14px; margin-bottom:12px; opacity:0.9; background:#121b3c;">
+      <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">🔒 Неизменяемые данные анкеты:</div>
+      <div>💍 ${marriedStr}</div>
+      <div>👶 ${childrenStr}</div>
     </div>
 
-    <div style="margin-top:15px;">
-      <button class="btn secondary" style="width:100%;" onclick="requestVerify()">Запросить синюю галочку (Верификация)</button>
+    <div class="section-title"><h2>Редактировать анкету</h2></div>
+    <div class="card" style="padding:14px; display:flex; flex-direction:column; gap:10px;">
+      <label>О себе (разрешено к изменению):
+        <textarea id="editAbout" placeholder="О себе" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#121b3c; color:#fff; margin-top:4px;">${escapeHtml(u.about||'')}</textarea>
+      </label>
+      <button class="btn" onclick="saveProfile()">Сохранить описание</button>
+    </div>
+
+    <div style="margin-top:12px;">
+      <button class="btn secondary" style="width:100%;" onclick="nav('settings')">⚙️ Настройки приватности</button>
+    </div>
+
+    <div style="margin-top:12px;">
+      ${isVerified ? '<div style="color:#4caf50; font-weight:bold; text-align:center;">✓ Ваш профиль верифицирован</div>' : 
+        isPending ? '<div style="color:#ff9800; font-weight:bold; text-align:center;">⏳ Заявка на верификацию рассматривается</div>' :
+        '<button class="btn secondary" style="width:100%;" onclick="requestVerify()">Запросить синюю галочку (Верификация)</button>'
+      }
     </div>`;
+}
+
+function settingsPage() {
+  const u = me.user || {};
+  app.innerHTML = `
+    <div class="section-title">
+      <button class="btn secondary" style="flex:none; padding:5px 10px;" onclick="nav('profile')">← Назад</button>
+      <h2>⚙️ Настройки</h2>
+    </div>
+    <div class="card" style="padding:16px; display:flex; flex-direction:column; gap:14px;">
+      <label style="display:flex; justify-content:space-between; align-items:center;">
+        <span>📷 Скрыть фотографии</span>
+        <input type="checkbox" id="setPhotos" ${u.photos_hidden ? 'checked' : ''} />
+      </label>
+      <label style="display:flex; justify-content:space-between; align-items:center;">
+        <span>🟢 Показывать онлайн-статус</span>
+        <input type="checkbox" id="setOnline" ${u.show_online_status !== 0 ? 'checked' : ''} />
+      </label>
+      <label style="display:flex; justify-content:space-between; align-items:center;">
+        <span>🕐 Показывать время последнего визита</span>
+        <input type="checkbox" id="setLastSeen" ${u.show_last_seen !== 0 ? 'checked' : ''} />
+      </label>
+      <label style="display:flex; justify-content:space-between; align-items:center;">
+        <span>🔔 Включить уведомления</span>
+        <input type="checkbox" id="setNotif" ${u.notifications_enabled !== 0 ? 'checked' : ''} />
+      </label>
+      <button class="btn" onclick="saveSettings()">Сохранить настройки</button>
+    </div>`;
+}
+
+async function saveSettings() {
+  const body = {
+    photos_hidden: document.getElementById('setPhotos').checked,
+    show_online_status: document.getElementById('setOnline').checked,
+    show_last_seen: document.getElementById('setLastSeen').checked,
+    notifications_enabled: document.getElementById('setNotif').checked
+  };
+  await api('/api/settings', { method: 'POST', body: JSON.stringify(body) });
+  if (tg?.showPopup) tg.showPopup({ title: 'Du&Yes', message: 'Настройки сохранены!', buttons: [{ type: 'ok' }] });
+  nav('profile');
 }
 
 async function saveProfile() {
   const body = {
-    name: document.getElementById('editName').value,
-    birth_date: document.getElementById('editBirth').value,
-    city: document.getElementById('editCity').value,
     about: document.getElementById('editAbout').value
   };
   await api('/api/me', { method: 'POST', body: JSON.stringify(body) });
-  if (tg?.showPopup) tg.showPopup({ title: 'Du&Yes', message: 'Анкета успешно сохранена!', buttons: [{ type: 'ok' }] });
+  if (tg?.showPopup) tg.showPopup({ title: 'Du&Yes', message: 'Описание обновлено!', buttons: [{ type: 'ok' }] });
   render();
 }
 
 async function requestVerify() {
   await api('/api/verification/request', { method: 'POST' });
   if (tg?.showPopup) tg.showPopup({ title: 'Du&Yes', message: 'Заявка на верификацию отправлена модераторам.', buttons: [{ type: 'ok' }] });
+  render();
 }
 
 async function showGifts() {
