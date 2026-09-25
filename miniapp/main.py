@@ -22,7 +22,7 @@ DB_NAME = os.getenv("DB_NAME", "duyes.db")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 INIT_DATA_MAX_AGE = int(os.getenv("MINIAPP_INIT_DATA_MAX_AGE", "86400"))
 
-app = FastAPI(title="Du&Yes Mini App API", version="2.0.0")
+app = FastAPI(title="Du&Yes Mini App API", version="2.1.0")
 init_db()
 
 app.add_middleware(
@@ -41,6 +41,7 @@ def db():
 
 
 def send_telegram_notification(user_id: int, text: str):
+    """Отправляет личное сообщение пользователю через Telegram Bot API."""
     if not BOT_TOKEN:
         return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -109,7 +110,6 @@ def me(x_telegram_init_data: str | None = Header(default=None)):
     conn = db()
     row = conn.execute("SELECT * FROM users WHERE user_id=?", (uid,)).fetchone()
     
-    # Получение баланса монет
     bal_row = conn.execute("SELECT coins FROM gift_balances WHERE user_id=?", (uid,)).fetchone()
     coins = bal_row["coins"] if bal_row else 0
     conn.close()
@@ -134,11 +134,11 @@ def update_profile(data: dict, x_telegram_init_data: str | None = Header(default
         VALUES (?, ?, ?, ?, ?, ?, ?, 1)
         ON CONFLICT(user_id) DO UPDATE SET
             name = excluded.name,
-            gender = excluded.gender,
-            birth_date = excluded.birth_date,
-            country = excluded.country,
-            city = excluded.city,
-            about = excluded.about,
+            gender = COALESCE(excluded.gender, users.gender),
+            birth_date = COALESCE(excluded.birth_date, users.birth_date),
+            country = COALESCE(excluded.country, users.country),
+            city = COALESCE(excluded.city, users.city),
+            about = COALESCE(excluded.about, users.about),
             profile_published = 1,
             updated_at = CURRENT_TIMESTAMP
     """, (
@@ -387,6 +387,20 @@ def request_verification(x_telegram_init_data: str | None = Header(default=None)
     conn.commit()
     conn.close()
     return {"ok": True}
+
+
+@app.get("/api/admin/add-coins")
+def add_coins(x_telegram_init_data: str | None = Header(default=None)):
+    """Вспомогательный эндпоинт для автоначисления 1000 монет пользователю."""
+    uid = current_user(x_telegram_init_data)
+    conn = db()
+    conn.execute(
+        "INSERT INTO gift_balances (user_id, coins) VALUES (?, 1000) ON CONFLICT(user_id) DO UPDATE SET coins = coins + 1000",
+        (uid,)
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True, "message": "Начислено +1000 монет!"}
 
 
 if STATIC_DIR.exists():
