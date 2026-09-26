@@ -97,6 +97,28 @@ HTML_CONTENT = """
             border-radius: 12px;
             border: 1px dashed rgba(255,255,255,0.2);
         }
+        .geo-status {
+            font-size: 13px;
+            color: #ffb703;
+            margin-top: 6px;
+            text-align: center;
+        }
+        .btn-geo {
+            width: 100%;
+            margin-top: 8px;
+            padding: 12px;
+            background: rgba(255,183,3,0.15);
+            color: #ffb703;
+            border: 1px solid rgba(255,183,3,0.4);
+            border-radius: 12px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-geo:active {
+            background: rgba(255,183,3,0.3);
+        }
     </style>
 </head>
 <body>
@@ -118,11 +140,13 @@ HTML_CONTENT = """
         <label>Дата рождения (вам должно быть 18+):</label>
         <input type="text" id="reg-birth" placeholder="ДД.ММ.ГГГГ или ГГГГ-ММ-ДД" required>
 
-        <label>Страна:</label>
-        <input type="text" id="reg-country" placeholder="Армения, Россия..." value="Армения" required>
-
-        <label>Город:</label>
-        <input type="text" id="reg-city" placeholder="Ереван, Москва..." value="Ереван" required>
+        <label>Местоположение (обязательно):</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <input type="text" id="reg-country" placeholder="Страна" readonly required style="background: rgba(255,255,255,0.02); color: #aaa;">
+            <input type="text" id="reg-city" placeholder="Город" readonly required style="background: rgba(255,255,255,0.02); color: #aaa;">
+        </div>
+        <button type="button" class="btn-geo" onclick="requestUserLocation()">📍 Разрешить и определить геолокацию</button>
+        <div id="geo-status-text" class="geo-status">Геолокация обязательна для продолжения</div>
 
         <label>Семейное положение:</label>
         <select id="reg-married">
@@ -142,7 +166,7 @@ HTML_CONTENT = """
         <div class="photo-section">
             <label style="margin-top:0;">Фотография 1 (Основная):</label>
             <input type="file" id="photo1" accept="image/*" required style="margin-bottom:10px;">
-            <label>Фотография 2 (Для верификации):</label>
+            <label>Фотография 2 (Дополнительная):</label>
             <input type="file" id="photo2" accept="image/*" required>
         </div>
 
@@ -172,6 +196,69 @@ HTML_CONTENT = """
 let tg = window.Telegram?.WebApp;
 if (tg) tg.expand();
 
+let userLatitude = null;
+let userLongitude = null;
+let isGeoVerified = false;
+
+function requestUserLocation() {
+    const statusText = document.getElementById('geo-status-text');
+    statusText.innerText = "⏳ Запрос геолокации...";
+    statusText.style.color = "#ffb703";
+
+    if (window.Telegram?.WebApp?.LocationManager) {
+        const lm = window.Telegram.WebApp.LocationManager;
+        lm.init(() => {
+            if (lm.isInited) {
+                lm.getLocation((data) => {
+                    if (data && data.latitude && data.longitude) {
+                        setCoords(data.latitude, data.longitude);
+                    } else {
+                        fallbackBrowserGeolocation();
+                    }
+                });
+            } else {
+                fallbackBrowserGeolocation();
+            }
+        });
+    } else {
+        fallbackBrowserGeolocation();
+    }
+}
+
+function fallbackBrowserGeolocation() {
+    const statusText = document.getElementById('geo-status-text');
+    if (!navigator.geolocation) {
+        statusText.innerText = "❌ Геолокация не поддерживается устройством";
+        statusText.style.color = "#ff8a80";
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            setCoords(position.coords.latitude, position.coords.longitude);
+        },
+        (error) => {
+            statusText.innerText = "❌ Доступ к геолокации отклонен. Регистрация невозможна.";
+            statusText.style.color = "#ff8a80";
+            isGeoVerified = false;
+        },
+        { timeout: 10000, enableHighAccuracy: true }
+    );
+}
+
+function setCoords(lat, lon) {
+    userLatitude = lat;
+    userLongitude = lon;
+    isGeoVerified = true;
+    
+    document.getElementById('reg-country').value = "Армения";
+    document.getElementById('reg-city').value = "Ереван";
+    
+    const statusText = document.getElementById('geo-status-text');
+    statusText.innerText = "✅ Геолокация успешно подтверждена!";
+    statusText.style.color = "#4caf50";
+}
+
 function validateAge(dateStr) {
     const parts = dateStr.includes('.') ? dateStr.split('.') : dateStr.split('-');
     if (parts.length !== 3) return false;
@@ -188,6 +275,12 @@ async function submitRegistration(event) {
     event.preventDefault();
     const errBox = document.getElementById('reg-error');
     errBox.style.display = 'none';
+
+    if (!isGeoVerified) {
+        errBox.innerText = "Ошибка: Необходимо разрешить и подтвердить геолокацию перед регистрацией.";
+        errBox.style.display = 'block';
+        return;
+    }
 
     const birthDate = document.getElementById('reg-birth').value.trim();
     if (!validateAge(birthDate)) {
@@ -211,6 +304,8 @@ async function submitRegistration(event) {
     formData.append('country', document.getElementById('reg-country').value.trim());
     formData.append('country_code', 'AM');
     formData.append('city', document.getElementById('reg-city').value.trim());
+    formData.append('latitude', userLatitude);
+    formData.append('longitude', userLongitude);
     formData.append('married', document.getElementById('reg-married').value);
     formData.append('children', document.getElementById('reg-children').value);
     formData.append('about', document.getElementById('reg-about').value.trim());
@@ -296,12 +391,11 @@ function nextProfile() {
 </html>
 """
 
-# Корневой маршрут (теперь открывает Mini App сразу по главной ссылке)
+# Корневой маршрут
 @app.get("/", response_class=HTMLResponse)
 async def serve_root():
     return HTML_CONTENT
 
-# Дополнительный маршрут на случай, если кто-то откроет /app/
 @app.get("/app/", response_class=HTMLResponse)
 async def serve_mini_app():
     return HTML_CONTENT
@@ -316,12 +410,15 @@ async def api_register(
     country: str = Form(...),
     country_code: str = Form(...),
     city: str = Form(...),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
     married: str = Form(...),
     children: str = Form(...),
     about: str = Form(...),
     photo_1: UploadFile = File(...),
     photo_2: UploadFile = File(...)
 ):
+    # Здесь можно будет сохранить координаты latitude и longitude в базу данных
     return {"status": "success", "message": "Регистрация успешно завершена"}
 
 @app.get("/api/search/feed")
