@@ -3,109 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Du&Yes Mini App</title>
+    <title>Du&Yes</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f4f4f6; margin: 0; padding: 16px; color: #333; }
-        .card { background: #fff; border-radius: 20px; padding: 20px; max-width: 400px; margin: 10px auto; box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
-        h2 { text-align: center; color: #ff4b72; margin-top: 0; }
-        label { display: block; margin: 12px 0 6px 0; font-weight: 600; font-size: 14px; }
-        input, select, textarea { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; font-size: 15px; outline: none; }
-        button { width: 100%; margin-top: 20px; padding: 14px; background: #ff4b72; color: #fff; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; }
-        .btn-row { display: flex; gap: 10px; }
-        .gender-btn { flex: 1; padding: 14px; border-radius: 10px; border: 1px solid #ddd; background: #f9f9f9; font-weight: bold; cursor: pointer; }
-        .error { background: #ffebee; color: #c62828; padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 15px; display: none; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #121420 0%, #1a1c2e 100%);
+            margin: 0;
+            padding: 16px;
+            color: #fff;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 440px;
+            margin: 0 auto;
+            background: rgba(26, 28, 46, 0.95);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        h2 {
+            text-align: center;
+            color: #ffb703;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+        label {
+            display: block;
+            margin: 14px 0 6px 0;
+            font-weight: 500;
+            font-size: 14px;
+            color: #e0e0e0;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            box-sizing: border-box;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: #ffb703;
+        }
+        select option {
+            background: #1a1c2e;
+            color: #fff;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        .btn-submit {
+            width: 100%;
+            margin-top: 24px;
+            padding: 14px;
+            background: linear-gradient(135deg, #ffb703 0%, #fb8500 100%);
+            color: #121420;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(251,133,0,0.3);
+        }
+        .error {
+            background: rgba(198,40,40,0.2);
+            border: 1px solid #c62828;
+            color: #ff8a80;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        .photo-section {
+            margin-top: 15px;
+            background: rgba(255,255,255,0.03);
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px dashed rgba(255,255,255,0.2);
+        }
     </style>
 </head>
 <body>
 
-    <!-- ЭКРАН РЕГИСТРАЦИИ -->
-    <div id="screen-register" class="card">
-        <h2>📝 Регистрация анкеты</h2>
-        <div id="reg-step-title" style="text-align:center; font-size:13px; color:#888; margin-bottom:15px;">Шаг 1 из 5</div>
-        <div id="reg-error" class="error"></div>
+<div class="container" id="screen-register">
+    <h2>Регистрация</h2>
+    <div id="reg-error" class="error"></div>
 
-        <!-- Шаг 1 -->
-        <div class="reg-step" data-step="1">
-            <label>Укажите ваш пол:</label>
-            <div class="btn-row">
-                <button type="button" class="gender-btn" onclick="selectGender('male', this)" style="background:#ff4b72; color:#fff;">👨 Мужчина</button>
-                <button type="button" class="gender-btn" onclick="selectGender('female', this)">👩 Женщина</button>
-            </div>
+    <form id="registration-form" onsubmit="submitRegistration(event)">
+        <label>Ваше имя:</label>
+        <input type="text" id="reg-name" maxlength="15" placeholder="Имя" required>
+
+        <label>Пол:</label>
+        <select id="reg-gender">
+            <option value="male">Мужской</option>
+            <option value="female">Женский</option>
+        </select>
+
+        <label>Дата рождения (вам должно быть 18+):</label>
+        <input type="text" id="reg-birth" placeholder="ДД.ММ.ГГГГ или ГГГГ-ММ-ДД" required>
+
+        <label>Страна:</label>
+        <input type="text" id="reg-country" placeholder="Армения, Россия..." value="Армения" required>
+
+        <label>Город:</label>
+        <input type="text" id="reg-city" placeholder="Ереван, Москва..." value="Ереван" required>
+
+        <label>Семейное положение:</label>
+        <select id="reg-married">
+            <option value="no">Не состоял(а) в браке</option>
+            <option value="yes">Состоял(а) в браке</option>
+        </select>
+
+        <label>Дети:</label>
+        <select id="reg-children">
+            <option value="no">Нет детей</option>
+            <option value="yes">Есть дети</option>
+        </select>
+
+        <label>О себе:</label>
+        <textarea id="reg-about" placeholder="Расскажите о себе, ваших ценностях и целях..."></textarea>
+
+        <div class="photo-section">
+            <label style="margin-top:0;">Фотография 1 (Основная):</label>
+            <input type="file" id="photo1" accept="image/*" required style="margin-bottom:10px;">
+            <label>Фотография 2 (Для верификации):</label>
+            <input type="file" id="photo2" accept="image/*" required>
         </div>
 
-        <!-- Шаг 2 -->
-        <div class="reg-step" data-step="2" style="display:none;">
-            <label>Ваше имя:</label>
-            <input type="text" id="reg-name" maxlength="10" placeholder="Например, Анна">
-            <label>Дата рождения (ДД.ММ.ГГГГ):</label>
-            <input type="text" id="reg-birth" placeholder="15.05.1995">
-            <small style="color:#666; font-size:12px;">Возраст: строго от 18 до 72 лет.</small>
-        </div>
+        <button type="submit" class="btn-submit">Завершить регистрацию</button>
+    </form>
+</div>
 
-        <!-- Шаг 3 -->
-        <div class="reg-step" data-step="3" style="display:none;">
-            <label>Состояли ли ранее в браке?</label>
-            <select id="reg-married">
-                <option value="no">Нет</option>
-                <option value="yes">Да</option>
-            </select>
-            <label>Есть ли у вас дети?</label>
-            <select id="reg-children">
-                <option value="no">Нет</option>
-                <option value="yes">Да</option>
-            </select>
+<!-- Лента анкет (скрыта до регистрации) -->
+<div class="container" id="screen-feed" style="display:none; padding:0; overflow:hidden;">
+    <img id="feed-photo" src="" alt="Фото" style="width:100%; height:380px; object-fit:cover;">
+    <div style="padding: 20px;">
+        <h2 id="feed-name-age" style="text-align:left; margin:0 0 6px 0; color:#fff;"></h2>
+        <p id="feed-location" style="margin:0 0 12px 0; font-weight:600; color:#ffb703;"></p>
+        <p id="feed-about" style="margin:0; color:#ccc; line-height:1.4;"></p>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
+            <button onclick="feedAction('favorite')" id="feed-fav-btn" style="padding:12px; border-radius:10px; border:none; background:rgba(255,255,255,0.1); color:#fff; font-weight:bold; cursor:pointer;">⭐ В избранное</button>
+            <button onclick="alert('Чат открывается')" style="padding:12px; border-radius:10px; border:none; background:#2e7d32; color:#fff; font-weight:bold; cursor:pointer;">💬 Написать</button>
+            <button onclick="feedAction('block')" style="padding:12px; border-radius:10px; border:none; background:rgba(198,40,40,0.3); color:#ff8a80; font-weight:bold; cursor:pointer;">🚫 Блок</button>
+            <button onclick="feedAction('report')" style="padding:12px; border-radius:10px; border:none; background:rgba(245,127,23,0.3); color:#ffb703; font-weight:bold; cursor:pointer;">⚠️ Жалоба</button>
         </div>
-
-        <!-- Шаг 4 -->
-        <div class="reg-step" data-step="4" style="display:none;">
-            <label>Расскажите немного о себе:</label>
-            <textarea id="reg-about" rows="4" placeholder="Ваши интересы и увлечения..."></textarea>
-        </div>
-
-        <!-- Шаг 5 -->
-        <div class="reg-step" data-step="5" style="display:none;">
-            <p style="font-size:13px; color:#555;">📷 Загрузите **две фотографии** для проверки подлинности:</p>
-            <label>Фотография 1:</label>
-            <input type="file" id="photo1" accept="image/*">
-            <label>Фотография 2:</label>
-            <input type="file" id="photo2" accept="image/*">
-        </div>
-
-        <button id="reg-next-btn" onclick="nextRegStep()">Далее →</button>
+        <button onclick="nextProfile()" style="width:100%; margin-top: 15px; padding: 14px; background: #ffb703; color: #121420; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px;">➡️ Следующая анкета</button>
     </div>
-
-    <!-- ЭКРАН ЛЕНТЫ АНКЕТ (скрыт до завершения регистрации) -->
-    <div id="screen-feed" class="card" style="display:none; padding:0; overflow:hidden;">
-        <img id="feed-photo" src="" alt="Фото" style="width:100%; height:360px; object-fit:cover;">
-        <div style="padding: 20px;">
-            <h2 id="feed-name-age" style="text-align:left; margin:0 0 6px 0;"></h2>
-            <p id="feed-location" style="margin:0 0 12px 0; font-weight:600; color:#555;"></p>
-            <p id="feed-about" style="margin:0; color:#444; line-height:1.4;"></p>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
-                <button onclick="feedAction('favorite')" id="feed-fav-btn" style="margin:0; background:#f5f5f7; color:#333;">⭐ В избранное</button>
-                <button onclick="alert('Чат открывается')" style="margin:0; background:#e8f5e9; color:#2e7d32;">💬 Написать</button>
-                <button onclick="feedAction('block')" style="margin:0; background:#ffebee; color:#c62828;">🚫 Блок</button>
-                <button onclick="feedAction('report')" style="margin:0; background:#fff8e1; color:#f57f17;">⚠️ Жалоба</button>
-            </div>
-            <button onclick="nextProfile()" style="margin-top: 12px; background:#ff4b72;">➡️ Следующая анкета</button>
-        </div>
-    </div>
+</div>
 
 <script>
 let tg = window.Telegram?.WebApp;
 if (tg) tg.expand();
-
-let regData = { gender: 'male', countryCode: 'AM', country: 'Армения', city: 'Ереван' };
-let currentRegStep = 1;
-
-function selectGender(g, btn) {
-    regData.gender = g;
-    document.querySelectorAll('.gender-btn').forEach(b => { b.style.background = '#f9f9f9'; b.style.color = '#333'; });
-    btn.style.background = '#ff4b72';
-    btn.style.color = '#fff';
-}
 
 function validateAge(dateStr) {
     const parts = dateStr.includes('.') ? dateStr.split('.') : dateStr.split('-');
@@ -119,48 +176,36 @@ function validateAge(dateStr) {
     return age >= 18 && age <= 72;
 }
 
-function nextRegStep() {
+async function submitRegistration(event) {
+    event.preventDefault();
     const errBox = document.getElementById('reg-error');
     errBox.style.display = 'none';
 
-    if (currentRegStep === 2) {
-        regData.firstName = document.getElementById('reg-name').value.trim();
-        regData.birthDate = document.getElementById('reg-birth').value.trim();
-        if (!regData.firstName) { errBox.innerText = "Введите ваше имя"; errBox.style.display = 'block'; return; }
-        if (!validateAge(regData.birthDate)) { errBox.innerText = "Возраст должен быть от 18 до 72 лет (ДД.ММ.ГГГГ)"; errBox.style.display = 'block'; return; }
-    }
-    if (currentRegStep === 3) {
-        regData.married = document.getElementById('reg-married').value;
-        regData.children = document.getElementById('reg-children').value;
-    }
-    if (currentRegStep === 4) {
-        regData.about = document.getElementById('reg-about').value;
+    const birthDate = document.getElementById('reg-birth').value.trim();
+    if (!validateAge(birthDate)) {
+        errBox.innerText = "Ошибка: Возраст должен быть строго от 18 до 72 лет.";
+        errBox.style.display = 'block';
+        return;
     }
 
-    if (currentRegStep < 5) {
-        document.querySelector(`[data-step="${currentRegStep}"]`).style.display = 'none';
-        currentRegStep++;
-        document.querySelector(`[data-step="${currentRegStep}"]`).style.display = 'block';
-        document.getElementById('reg-step-title').innerText = `Шаг ${currentRegStep} из 5`;
-        if (currentRegStep === 5) document.getElementById('reg-next-btn').innerText = "Завершить регистрацию";
-    } else {
-        submitRegistration();
-    }
-}
-
-async function submitRegistration() {
     const p1 = document.getElementById('photo1').files[0];
     const p2 = document.getElementById('photo2').files[0];
-    const errBox = document.getElementById('reg-error');
-
     if (!p1 || !p2) {
-        errBox.innerText = "Загрузите обе фотографии для проверки";
+        errBox.innerText = "Пожалуйста, загрузите обе фотографии.";
         errBox.style.display = 'block';
         return;
     }
 
     const formData = new FormData();
-    for (let key in regData) formData.append(key, regData[key]);
+    formData.append('first_name', document.getElementById('reg-name').value.trim());
+    formData.append('gender', document.getElementById('reg-gender').value);
+    formData.append('birth_date', birthDate);
+    formData.append('country', document.getElementById('reg-country').value.trim());
+    formData.append('country_code', 'AM'); // код по умолчанию или автоопределение
+    formData.append('city', document.getElementById('reg-city').value.trim());
+    formData.append('married', document.getElementById('reg-married').value);
+    formData.append('children', document.getElementById('reg-children').value);
+    formData.append('about', document.getElementById('reg-about').value.trim());
     formData.append('photo_1', p1);
     formData.append('photo_2', p2);
 
@@ -176,7 +221,8 @@ async function submitRegistration() {
             errBox.style.display = 'block';
             return;
         }
-        // Переходим к ленте анкет
+
+        // Переходим к ленте
         document.getElementById('screen-register').style.display = 'none';
         document.getElementById('screen-feed').style.display = 'block';
         loadFeed();
@@ -204,7 +250,7 @@ async function loadFeed() {
 
 function renderFeedProfile() {
     if (feedIndex >= feedProfiles.length) {
-        document.getElementById('screen-feed').innerHTML = "<h2 style='text-align:center; padding:40px;'>✨ Больше анкет нет</h2>";
+        document.getElementById('screen-feed').innerHTML = "<h2 style='text-align:center; padding:40px; color:#fff;'>✨ Больше анкет нет</h2>";
         return;
     }
     const p = feedProfiles[feedIndex];
@@ -228,8 +274,8 @@ async function feedAction(action) {
     if (action === 'block') nextProfile();
     if (action === 'favorite') {
         const btn = document.getElementById('feed-fav-btn');
-        btn.style.background = '#fff3f5';
-        btn.style.color = '#ff4b72';
+        btn.style.background = 'rgba(255,183,3,0.2)';
+        btn.style.color = '#ffb703';
         btn.innerText = '⭐ В избранном';
     }
 }
