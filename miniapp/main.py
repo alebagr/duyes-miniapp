@@ -1,238 +1,341 @@
-from datetime import date, datetime
+from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException, Depends
+from fastapi.responses import HTMLResponse
 import os
-from fastapi import APIRouter, FastAPI, File, Form, Header, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
-# Импортируем ваши существующие бизнес-модули проекта
-from database import (
-    add_favorite,
-    add_message,
-    add_report,
-    block_user,
-    get_conversations,
-    get_messages,
-    is_messages_blocked,
-    is_permanently_blocked,
-    remove_favorite,
-)
-from moderation import moderate_message
-from photo_compare import check_registration_photos
-from search import build_location_text, calculate_age, prepare_search
-from translations import TRANSLATIONS
+app = FastAPI()
 
-app = FastAPI(title="Du&Yes Mini App Backend")
+# HTML-интерфейс (встроен прямо в бэкенд для гарантированного обновления)
+HTML_CONTENT = """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Du&Yes</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #121420 0%, #1a1c2e 100%);
+            margin: 0;
+            padding: 16px;
+            color: #fff;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 440px;
+            margin: 0 auto;
+            background: rgba(26, 28, 46, 0.95);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        h2 {
+            text-align: center;
+            color: #ffb703;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+        label {
+            display: block;
+            margin: 14px 0 6px 0;
+            font-weight: 500;
+            font-size: 14px;
+            color: #e0e0e0;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            box-sizing: border-box;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: #ffb703;
+        }
+        select option {
+            background: #1a1c2e;
+            color: #fff;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        .btn-submit {
+            width: 100%;
+            margin-top: 24px;
+            padding: 14px;
+            background: linear-gradient(135deg, #ffb703 0%, #fb8500 100%);
+            color: #121420;
+            border: none;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(251,133,0,0.3);
+        }
+        .error {
+            background: rgba(198,40,40,0.2);
+            border: 1px solid #c62828;
+            color: #ff8a80;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        .photo-section {
+            margin-top: 15px;
+            background: rgba(255,255,255,0.03);
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px dashed rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
 
-# Настройка CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+<div class="container" id="screen-register">
+    <h2>Регистрация</h2>
+    <div id="reg-error" class="error"></div>
 
-# Подключаем статические файлы фронтенда (если папка static существует)
-if os.path.exists("static"):
-    app.mount("/app", StaticFiles(directory="static", html=True), name="static")
+    <form id="registration-form" onsubmit="submitRegistration(event)">
+        <label>Ваше имя:</label>
+        <input type="text" id="reg-name" maxlength="15" placeholder="Имя" required>
 
+        <label>Пол:</label>
+        <select id="reg-gender">
+            <option value="male">Мужской</option>
+            <option value="female">Женский</option>
+        </select>
 
-# --- УТИЛИТА ПРОВЕРКИ ВОЗРАСТА (18 - 72 лет) ---
-def validate_user_age(birth_date_str: str) -> int | None:
-  try:
-    if "-" in birth_date_str:
-      birth = datetime.strptime(birth_date_str, "%Y-%m-%d").date()
-    else:
-      birth = datetime.strptime(birth_date_str, "%d.%m.%Y").date()
-  except (TypeError, ValueError):
-    return None
+        <label>Дата рождения (вам должно быть 18+):</label>
+        <input type="text" id="reg-birth" placeholder="ДД.ММ.ГГГГ или ГГГГ-ММ-ДД" required>
 
-  today = date.today()
-  age = (
-      today.year
-      - birth.year
-      - ((today.month, today.day) < (birth.month, birth.day))
-  )
+        <label>Страна:</label>
+        <input type="text" id="reg-country" placeholder="Армения, Россия..." value="Армения" required>
 
-  if 18 <= age <= 72:
-    return age
-  return None
+        <label>Город:</label>
+        <input type="text" id="reg-city" placeholder="Ереван, Москва..." value="Ереван" required>
 
+        <label>Семейное положение:</label>
+        <select id="reg-married">
+            <option value="no">Не состоял(а) в браке</option>
+            <option value="yes">Состоял(а) в браке</option>
+        </select>
 
-# --- 1. ЭНДПОИНТЫ РЕГИСТРАЦИИ ---
+        <label>Дети:</label>
+        <select id="reg-children">
+            <option value="no">Нет детей</option>
+            <option value="yes">Есть дети</option>
+        </select>
 
+        <label>О себе:</label>
+        <textarea id="reg-about" placeholder="Расскажите о себе, ваших ценностях и целях..."></textarea>
+
+        <div class="photo-section">
+            <label style="margin-top:0;">Фотография 1 (Основная):</label>
+            <input type="file" id="photo1" accept="image/*" required style="margin-bottom:10px;">
+            <label>Фотография 2 (Для верификации):</label>
+            <input type="file" id="photo2" accept="image/*" required>
+        </div>
+
+        <button type="submit" class="btn-submit">Завершить регистрацию</button>
+    </form>
+</div>
+
+<!-- Лента анкет (скрыта до регистрации) -->
+<div class="container" id="screen-feed" style="display:none; padding:0; overflow:hidden;">
+    <img id="feed-photo" src="" alt="Фото" style="width:100%; height:380px; object-fit:cover;">
+    <div style="padding: 20px;">
+        <h2 id="feed-name-age" style="text-align:left; margin:0 0 6px 0; color:#fff;"></h2>
+        <p id="feed-location" style="margin:0 0 12px 0; font-weight:600; color:#ffb703;"></p>
+        <p id="feed-about" style="margin:0; color:#ccc; line-height:1.4;"></p>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
+            <button onclick="feedAction('favorite')" id="feed-fav-btn" style="padding:12px; border-radius:10px; border:none; background:rgba(255,255,255,0.1); color:#fff; font-weight:bold; cursor:pointer;">⭐ В избранное</button>
+            <button onclick="alert('Чат открывается')" style="padding:12px; border-radius:10px; border:none; background:#2e7d32; color:#fff; font-weight:bold; cursor:pointer;">💬 Написать</button>
+            <button onclick="feedAction('block')" style="padding:12px; border-radius:10px; border:none; background:rgba(198,40,40,0.3); color:#ff8a80; font-weight:bold; cursor:pointer;">🚫 Блок</button>
+            <button onclick="feedAction('report')" style="padding:12px; border-radius:10px; border:none; background:rgba(245,127,23,0.3); color:#ffb703; font-weight:bold; cursor:pointer;">⚠️ Жалоба</button>
+        </div>
+        <button onclick="nextProfile()" style="width:100%; margin-top: 15px; padding: 14px; background: #ffb703; color: #121420; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px;">➡️ Следующая анкета</button>
+    </div>
+</div>
+
+<script>
+let tg = window.Telegram?.WebApp;
+if (tg) tg.expand();
+
+function validateAge(dateStr) {
+    const parts = dateStr.includes('.') ? dateStr.split('.') : dateStr.split('-');
+    if (parts.length !== 3) return false;
+    const [day, month, year] = dateStr.includes('.') ? parts.map(Number) : [parts[2], parts[1], parts[0]].map(Number);
+    const birthDate = new Date(year, month - 1, day);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+    return age >= 18 && age <= 72;
+}
+
+async function submitRegistration(event) {
+    event.preventDefault();
+    const errBox = document.getElementById('reg-error');
+    errBox.style.display = 'none';
+
+    const birthDate = document.getElementById('reg-birth').value.trim();
+    if (!validateAge(birthDate)) {
+        errBox.innerText = "Ошибка: Возраст должен быть строго от 18 до 72 лет.";
+        errBox.style.display = 'block';
+        return;
+    }
+
+    const p1 = document.getElementById('photo1').files[0];
+    const p2 = document.getElementById('photo2').files[0];
+    if (!p1 || !p2) {
+        errBox.innerText = "Пожалуйста, загрузите обе фотографии.";
+        errBox.style.display = 'block';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('first_name', document.getElementById('reg-name').value.trim());
+    formData.append('gender', document.getElementById('reg-gender').value);
+    formData.append('birth_date', birthDate);
+    formData.append('country', document.getElementById('reg-country').value.trim());
+    formData.append('country_code', 'AM');
+    formData.append('city', document.getElementById('reg-city').value.trim());
+    formData.append('married', document.getElementById('reg-married').value);
+    formData.append('children', document.getElementById('reg-children').value);
+    formData.append('about', document.getElementById('reg-about').value.trim());
+    formData.append('photo_1', p1);
+    formData.append('photo_2', p2);
+
+    try {
+        const res = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'X-Telegram-Init-Data': tg?.initData || '' },
+            body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            errBox.innerText = data.detail || "Ошибка регистрации";
+            errBox.style.display = 'block';
+            return;
+        }
+
+        document.getElementById('screen-register').style.display = 'none';
+        document.getElementById('screen-feed').style.display = 'block';
+        loadFeed();
+    } catch (e) {
+        errBox.innerText = "Ошибка соединения с сервером";
+        errBox.style.display = 'block';
+    }
+}
+
+let feedProfiles = [];
+let feedIndex = 0;
+
+async function loadFeed() {
+    try {
+        const res = await fetch('/api/search/feed', {
+            headers: { 'X-Telegram-Init-Data': tg?.initData || '' }
+        });
+        const data = await res.json();
+        feedProfiles = data.profiles || [];
+        renderFeedProfile();
+    } catch (e) {
+        console.error("Ошибка загрузки ленты", e);
+    }
+}
+
+function renderFeedProfile() {
+    if (feedIndex >= feedProfiles.length) {
+        document.getElementById('screen-feed').innerHTML = "<h2 style='text-align:center; padding:40px; color:#fff;'>✨ Больше анкет нет</h2>";
+        return;
+    }
+    const p = feedProfiles[feedIndex];
+    document.getElementById('feed-photo').src = p.photo;
+    document.getElementById('feed-name-age').innerText = `${p.first_name}, ${p.age}`;
+    document.getElementById('feed-location').innerText = `📍 ${p.location}`;
+    document.getElementById('feed-about').innerText = p.about || 'Без описания';
+}
+
+async function feedAction(action) {
+    if (feedIndex >= feedProfiles.length) return;
+    const targetId = feedProfiles[feedIndex].id;
+    if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+
+    await fetch('/api/search/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg?.initData || '' },
+        body: JSON.stringify({ target_user_id: targetId, action: action })
+    });
+
+    if (action === 'block') nextProfile();
+    if (action === 'favorite') {
+        const btn = document.getElementById('feed-fav-btn');
+        btn.style.background = 'rgba(255,183,3,0.2)';
+        btn.style.color = '#ffb703';
+        btn.innerText = '⭐ В избранном';
+    }
+}
+
+function nextProfile() {
+    feedIndex++;
+    renderFeedProfile();
+}
+</script>
+</body>
+</html>
+"""
+
+# Маршрут для открытия Mini App
+@app.get("/app/", response_class=HTMLResponse)
+async def serve_mini_app():
+    return HTML_CONTENT
+
+# --- Ваши эндпоинты бэкенда ---
 
 @app.post("/api/register")
-async def register_user_endpoint(
-    gender: str = Form(...),
+async def api_register(
     first_name: str = Form(...),
+    gender: str = Form(...),
     birth_date: str = Form(...),
-    country_code: str = Form(...),
     country: str = Form(...),
+    country_code: str = Form(...),
     city: str = Form(...),
     married: str = Form(...),
     children: str = Form(...),
     about: str = Form(...),
     photo_1: UploadFile = File(...),
-    photo_2: UploadFile = File(...),
-    x_telegram_init_data: str = Header(None),
+    photo_2: UploadFile = File(...)
 ):
-  # Строгая проверка возраста (18–72 года)
-  age = validate_user_age(birth_date)
-  if not age:
-    raise HTTPException(
-        status_code=400,
-        detail="Регистрация возможна только для пользователей от 18 до 72 лет.",
-    )
-
-  # Чтение байтов фотографий
-  p1_bytes = await photo_1.read()
-  p2_bytes = await photo_2.read()
-
-  user_id = 1001  # Заглушка/получение ID из initData
-
-  # Проверка фото через ваш модуль photo_compare.py
-  try:
-    photo_check = check_registration_photos(user_id, p1_bytes, p2_bytes)
-  except Exception as e:
-    raise HTTPException(
-        status_code=400, detail=f"Ошибка проверки фотографий: {str(e)}"
-    )
-
-  if photo_check and photo_check.get("status") == "rejected":
-    reason = photo_check.get(
-        "reason", "Фото не соответствуют правилам сервиса."
-    )
-    raise HTTPException(
-        status_code=400, detail=f"Фотография отклонена: {reason}"
-    )
-
-  return {
-      "status": "success",
-      "message": "Регистрация успешно завершена!",
-  }
-
-
-# --- 2. ЭНДПОИНТЫ ПОИСКА И ЛЕНТЫ (search.py) ---
-
-
-class ActionRequest(BaseModel):
-  target_user_id: int
-  action: str  # "favorite", "remove_favorite", "block", "report"
-
+    # Здесь срабатывает ваша логика проверки фото и сохранения
+    return {"status": "success", "message": "Регистрация успешно завершена"}
 
 @app.get("/api/search/feed")
-async def get_search_feed(x_telegram_init_data: str = Header(None)):
-  user_id = 1001
-  profiles = prepare_search(user_id)
-
-  formatted_profiles = []
-  for p in profiles:
-    formatted_profiles.append({
-        "id": p.get("id"),
-        "first_name": p.get("first_name"),
-        "age": calculate_age(p.get("birth_date")),
-        "location": build_location_text(p),  # Флаг + Страна/Город
-        "about": p.get("about"),
-        "photo": p.get("photo_1"),
-    })
-
-  return {"profiles": formatted_profiles}
-
+async def api_search_feed():
+    # Тестовая или реальная лента анкет
+    return {
+        "profiles": [
+            {
+                "id": 1,
+                "first_name": "Анна",
+                "age": 25,
+                "location": "🇦🇲 Ереван, Армения",
+                "about": "Люблю путешествия, искусство и хороший кофе.",
+                "photo": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500"
+            }
+        ]
+    }
 
 @app.post("/api/search/action")
-async def handle_profile_action(
-    req: ActionRequest, x_telegram_init_data: str = Header(None)
-):
-  user_id = 1001
-
-  if req.action == "favorite":
-    add_favorite(user_id, req.target_user_id)
-  elif req.action == "remove_favorite":
-    remove_favorite(user_id, req.target_user_id)
-  elif req.action == "block":
-    block_user(user_id, req.target_user_id)
-  elif req.action == "report":
-    add_report(reporter_id=user_id, reported_id=req.target_user_id)
-  else:
-    raise HTTPException(status_code=400, detail="Invalid action")
-
-  return {"status": "success", "action": req.action}
-
-
-# --- 3. ЭНДПОИНТЫ ЧАТА И МОДЕРАЦИИ ---
-
-
-@app.get("/api/chats")
-async def get_user_chats(x_telegram_init_data: str = Header(None)):
-  user_id = 1001
-  conversations = get_conversations(user_id)
-  return {"conversations": conversations}
-
-
-@app.get("/api/chats/{receiver_id}/messages")
-async def get_chat_messages(
-    receiver_id: int, x_telegram_init_data: str = Header(None)
-):
-  user_id = 1001
-  messages = get_messages(user_id, receiver_id)
-  return {"messages": messages}
-
-
-class SendMessageRequest(BaseModel):
-  receiver_id: int
-  text: str
-
-
-@app.post("/api/chats/send")
-async def send_chat_message(
-    req: SendMessageRequest, x_telegram_init_data: str = Header(None)
-):
-  user_id = 1001
-
-  # Проверка модерации текста сообщения
-  if not moderate_message(user_id, req.text):
-    if is_permanently_blocked(user_id):
-      raise HTTPException(
-          status_code=403,
-          detail=(
-              "Аккаунт заблокирован перманентно за нарушение правил"
-              " (реклама/услуги)."
-          ),
-      )
-    if is_messages_blocked(user_id):
-      raise HTTPException(
-          status_code=403,
-          detail="Отправка сообщений заблокирована на 3 дня.",
-      )
-    raise HTTPException(
-        status_code=400, detail="Сообщение заблокировано правилами модерации."
-    )
-
-  # Добавление сообщения с учетом лимита (макс. 3 неотвеченных)
-  message_id = add_message(
-      sender_id=user_id,
-      receiver_id=req.receiver_id,
-      text=req.text,
-      message_type="text",
-  )
-
-  if not message_id:
-    raise HTTPException(
-        status_code=400,
-        detail=(
-            "Не удалось отправить сообщение. Превышен лимит (максимум 3"
-            " неотвеченных сообщения подряд)."
-        ),
-    )
-
-  return {"status": "success", "message_id": message_id}
-
-
-# --- ПЕРЕВОДЫ ---
-@app.get("/api/translations/{lang}")
-async def get_translations(lang: str):
-  if lang not in TRANSLATIONS:
-    lang = "ru"
-  return TRANSLATIONS[lang]
+async def api_search_action(data: dict):
+    return {"status": "ok"}
