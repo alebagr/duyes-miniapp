@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException, Depends
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 import os
 
 app = FastAPI()
@@ -296,12 +296,17 @@ function nextProfile() {
 </html>
 """
 
-# Маршрут для открытия Mini App
+# Корневой маршрут (теперь открывает Mini App сразу по главной ссылке)
+@app.get("/", response_class=HTMLResponse)
+async def serve_root():
+    return HTML_CONTENT
+
+# Дополнительный маршрут на случай, если кто-то откроет /app/
 @app.get("/app/", response_class=HTMLResponse)
 async def serve_mini_app():
     return HTML_CONTENT
 
-# --- Ваши эндпоинты бэкенда ---
+# --- Эндпоинты бэкенда ---
 
 @app.post("/api/register")
 async def api_register(
@@ -317,12 +322,10 @@ async def api_register(
     photo_1: UploadFile = File(...),
     photo_2: UploadFile = File(...)
 ):
-    # Здесь срабатывает ваша логика проверки фото и сохранения
     return {"status": "success", "message": "Регистрация успешно завершена"}
 
 @app.get("/api/search/feed")
 async def api_search_feed():
-    # Тестовая или реальная лента анкет
     return {
         "profiles": [
             {
