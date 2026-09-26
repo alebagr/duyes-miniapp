@@ -257,6 +257,14 @@ function setCoords(lat, lon) {
     const statusText = document.getElementById('geo-status-text');
     statusText.innerText = "✅ Геолокация успешно подтверждена!";
     statusText.style.color = "#4caf50";
+
+    const btnGeo = document.querySelector('.btn-geo');
+    if (btnGeo) {
+        btnGeo.innerText = "📍 Местоположение определено";
+        btnGeo.style.background = "rgba(76, 175, 80, 0.15)";
+        btnGeo.style.borderColor = "rgba(76, 175, 80, 0.4)";
+        btnGeo.style.color = "#4caf50";
+    }
 }
 
 function validateAge(dateStr) {
@@ -418,7 +426,6 @@ async def api_register(
     photo_1: UploadFile = File(...),
     photo_2: UploadFile = File(...)
 ):
-    # Здесь можно будет сохранить координаты latitude и longitude в базу данных
     return {"status": "success", "message": "Регистрация успешно завершена"}
 
 @app.get("/api/search/feed")
