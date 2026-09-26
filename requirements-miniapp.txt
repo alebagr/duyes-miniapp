@@ -1,4 +1,6 @@
-fastapi==0.116.1
+Fastapi==0.116.1
 uvicorn[standard]==0.35.0
 python-telegram-bot==22.5
 python-multipart
+geopy
+
